@@ -217,11 +217,12 @@ const LOUD_PRIORITY={pipe:['size','angle','length'],water:['size','length'],drai
 function parseSpec(p){
  const dep=depOf(p);const u=(p.d||'').toUpperCase();const a={};
  for(const[rx,ty,gl] of TYPE_RULES){if(rx.test(u)){a.type=ty;a.glyph=gl;break;}}
- const dim=u.match(/(\d+)\s*(?:MM)?\s*[Xx]\s*(\d+)(?!\s*DEG)/);
- const mm=u.match(/(\d+(?:\.\d+)?)\s*MM\b/);
- const inch=u.match(/(\d+(?:[ ]\d+)?(?:[./]\d+)?)\s*(?:IN\b|")/);
- const ft=u.match(/(\d+(?:\.\d+)?)\s*(?:FT\b|')/);
- const vol=u.match(/(\d+(?:\.\d+)?)\s*(L|ML|KG|G|OZ)\b/);
+ const uc=u.replace(/(\d{1,3})(?:[ -]\d\/\d)?\s*DEG/g,' ');
+ const dim=uc.match(/(\d+)\s*(?:MM)?\s*[Xx]\s*(\d+)(?![\d.])/);
+ const mm=uc.match(/(\d+(?:\.\d+)?)\s*MM\b/);
+ const inch=uc.match(/(\d+(?:[ ]\d+)?(?:[./]\d+)?)\s*(?:IN\b|")/);
+ const ft=uc.match(/(\d+(?:\.\d+)?)\s*(?:FT\b|')/);
+ const vol=uc.match(/(\d+(?:\.\d+)?)\s*(L|ML|KG|G|OZ)\b/);
  const deg=u.match(/(\d{1,3})(?:[ -](\d)\/(\d))?\s*DEG/);
  if(dim)a.size=dim[1]+' × '+dim[2]+' mm';else if(mm)a.size=mm[1]+' mm';else if(inch)a.size=inch[1].trim()+'"';
  if(ft)a.length=ft[1]+' ft';
@@ -278,37 +279,182 @@ function plateSVG(p,cls){
   '</svg>';
 }
 
+/* ---- MARKETING plate (browse persona): warm, calm, non-technical.
+   No SKU, no spec value, no unit. Soft department tone + one clean symbol + color cue. ---- */
+const SOFTICON={ // friendlier symbols for the merchandised look (fall back to type/dept glyph)
+ glv:'glv',vst:'vst',hat:'hat',eye:'eye',pnt:'pnt',drp:'drp',shv:'shv',hos:'hos',sgn:'sgn',
+ vlv:'vlv',hyd:'hyd',cyl:'cyl',mh:'mh'};
+function plateMarketing(p,cls){
+ const s=specOf(p);const h=DEPT[s.dep].h;
+ const bg='hsl('+h+',20%,92.5%)';const ic='hsl('+h+',27%,49%)';
+ const gi=glyphInner(s);
+ const icon=gi?'<g transform="translate(150 142) scale(3.7) translate(-12 -12)" stroke="'+ic+'" stroke-width="1.02" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity="0.92">'+gi+'</g>':'';
+ const chip=s.colorhex?'<circle cx="266" cy="34" r="10" fill="'+s.colorhex+'" stroke="#fff" stroke-width="1.5"/>':'';
+ return '<svg class="'+(cls||'')+'" viewBox="0 0 300 300" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="'+esc(pretty(p.d||(p.isKit?'valve box kit':'')))+'">'+
+  '<rect width="300" height="300" fill="'+bg+'"/>'+icon+chip+'</svg>';
+}
+
 function artSvg(p){return plateSVG(p,'sw');}
 function tile(p){const nm=p.n.replace(/"/g,'&quot;');const pr=p.p!=null?money(p.p)+' / '+ab(p.u):'Request pricing';
  return '<a class="tile" onclick="openProduct('+p.id+')"><div class="th">'+artSvg(p)+'</div><div class="tl">'+p.n+'<span style="display:block;color:#888;font-weight:600;font-size:12px;margin-top:3px">'+pr+'</span></div></a>';}
 
-/* ---- catnav + sections (lazy) ---- */
-document.getElementById('catnav').innerHTML='<div class="mclose" onclick="menu(false)">Close ✕</div><h4>Choose a Category</h4>'+CATS.map(c=>'<a onclick="jump(\'sec-'+c.id+'\')">'+c.name+' <span style="color:#bbb;font-weight:600">'+(GRP[c.id]||[]).length+'</span></a>').join('');
+/* ---- parametric catalog (McMaster-style) ---- */
+document.head.insertAdjacentHTML('beforeend','<style>'+
+'.railhome{display:flex;justify-content:space-between;font-weight:700;font-size:13px;padding:9px 0;cursor:pointer;border-bottom:1px solid #eee;margin-bottom:6px;color:#222}.railhome.on{color:#d81f2c}'+
+'.raildept{display:flex;justify-content:space-between;align-items:center;font-weight:700;font-size:12.5px;padding:8px 0;cursor:pointer;color:#333}.raildept.open{color:#d81f2c}.raildept:hover{color:#d81f2c}'+
+'.railgrp{display:flex!important;justify-content:space-between;padding:5px 0 5px 12px!important;font-size:12.5px;color:#666;cursor:pointer;border:0!important}.railgrp:hover{color:#d81f2c}.railgrp.on{color:#d81f2c;font-weight:700}'+
+'.rc{color:#bbb;font-weight:600;font-size:11.5px}'+
+'.gcrumb{font-size:13px;color:#888;margin-bottom:10px}.gcrumb a{color:#888;cursor:pointer}.gcrumb a:hover{color:#d81f2c}'+
+'.ghd{font-size:24px;margin:0 0 4px;color:#111;font-weight:800}'+
+'.grouplist{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px;margin-top:14px}'+
+'.groupcard{display:flex;align-items:center;gap:12px;border:1px solid #e8e8e4;border-radius:10px;padding:10px;cursor:pointer;background:#fff}.groupcard:hover{border-color:#222;box-shadow:0 2px 12px rgba(0,0,0,.07)}'+
+'.gci{width:42px;height:42px;border-radius:7px;overflow:hidden;flex:none}.gci svg{width:100%;height:100%}'+
+'.gn{font-weight:700;font-size:14px}.gm{font-size:12px;color:#888}.garrow{margin-left:auto;color:#ccc;font-size:18px}'+
+'.gtop{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin:14px 0 12px}'+
+'.gcount{font-size:14px;color:#666}.gcount b{color:#111}'+
+'.seg{display:inline-flex;border:1px solid #ddd;border-radius:8px;overflow:hidden}.seg button{border:0;background:#fff;padding:6px 11px;font-size:12.5px;color:#666;cursor:pointer;font-family:inherit}.seg button.on{background:#111;color:#fff}'+
+'.facets{border:1px solid #e8e8e4;border-radius:10px;padding:6px 14px;margin-bottom:14px}'+
+'.frow{display:flex;gap:6px;align-items:baseline;padding:7px 0;flex-wrap:wrap}.frow+.frow{border-top:1px solid #f1f1ed}'+
+'.flabel{width:84px;flex:none;font-size:11px;color:#999;text-transform:uppercase;letter-spacing:.05em;padding-top:4px}'+
+'.fval{font-size:13px;color:#444;padding:3px 10px;border-radius:14px;cursor:pointer}.fval:hover{background:#f4f4f1}.fval .fc{color:#bbb;font-size:11.5px;margin-left:4px}.fval.on{background:#111;color:#fff}.fval.on .fc{color:#999}'+
+'.factive{font-size:13px;color:#666;margin:0 0 12px}.factive .clr{color:#d81f2c;cursor:pointer;margin-left:8px}'+
+'.ptab{width:100%;border-collapse:collapse}.ptab th{text-align:left;font-size:11.5px;color:#999;font-weight:700;text-transform:uppercase;letter-spacing:.03em;padding:9px 8px;border-bottom:2px solid #eee;cursor:pointer;white-space:nowrap}.ptab th.pz{text-align:right}.ptab th .ar{color:#d81f2c;font-weight:700}'+
+'.ptab td{padding:9px 8px;border-bottom:1px solid #f1f1ed;font-size:13.5px;color:#222;vertical-align:middle}.ptab tr:hover td{background:#fafafa}'+
+'.ti2{width:30px;height:30px;border-radius:6px;overflow:hidden;flex:none}.ti2 svg{width:100%;height:100%}'+
+'.nmc{cursor:pointer;font-weight:600}.nmc:hover{color:#d81f2c}.pz{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}'+
+'.addb{border:1px solid #ddd;background:#fff;border-radius:7px;width:30px;height:30px;cursor:pointer;font-size:17px;color:#222;line-height:1}.addb:hover{background:#111;color:#fff;border-color:#111}'+
+'</style>');
 
-const INIT=24; // tiles shown per section before "show all"
-function sectionHtml(c){const it=GRP[c.id]||[];const shown=it.slice(0,INIT);
- const more=it.length>INIT?'<div class="showmore"><button onclick="expandSec(\''+c.id+'\')">Show all '+it.length+' products in '+c.name+'</button></div>':'';
- return '<section class="csec" id="sec-'+c.id+'"><div class="csechd"><h2>'+c.name+'</h2><span class="cct">'+it.length+' products</span></div>'+
+/* indexes */
+const GRP_BYGROUP={};PRODUCTS.forEach(p=>{(GRP_BYGROUP[p.g]=GRP_BYGROUP[p.g]||[]).push(p);});
+const GROUPSBYDEP={};DEPTS.forEach(d=>GROUPSBYDEP[d.id]=[]);Object.keys(GROUPS).forEach(g=>{if(GROUPSBYDEP[GROUPS[g].d])GROUPSBYDEP[GROUPS[g].d].push(g);});
+DEPTS.forEach(d=>GROUPSBYDEP[d.id].sort((a,b)=>GROUPS[b].c-GROUPS[a].c));
+const DEPTCOUNT={};DEPTS.forEach(d=>DEPTCOUNT[d.id]=GROUPSBYDEP[d.id].reduce((s,g)=>s+GROUPS[g].c,0));
+const ATTR={};PRODUCTS.forEach(p=>ATTR[p.id]=parseSpec(p));
+
+/* units */
+const NOMIN={13:'1/2',19:'3/4',25:'1',32:'1-1/4',38:'1-1/2',50:'2',63:'2-1/2',75:'3',100:'4',150:'6',200:'8',250:'10',300:'12',350:'14',400:'16',450:'18',500:'20',600:'24',750:'30',900:'36'};
+function mm2in(n){if(NOMIN[n])return NOMIN[n];return ''+(Math.round(n/25.4*4)/4);}
+function convSize(s,units){if(!s||units!=='inch'||s.indexOf('mm')<0)return s;var nums=s.match(/\d+(?:\.\d+)?/g)||[];var ins=nums.map(function(n){return mm2in(parseFloat(n));});return (s.indexOf('×')>-1?ins.join(' × '):ins[0])+'"';}
+
+/* state */
+var GV={code:null,deptView:null,openDep:null,F:{},units:'mm',view:'table',sort:null};
+function showLayout(){document.getElementById('pdp').style.display='none';document.querySelector('.layout').style.display='flex';}
+
+/* left rail tree */
+function buildRail(){
+ var h='<div class="mclose" onclick="menu(false)">Close ✕</div>';
+ h+='<div class="railhome'+(!GV.code&&!GV.deptView?' on':'')+'" onclick="showHome()"><span>All products</span><span class="rc">'+PRODUCTS.length.toLocaleString()+'</span></div>';
+ DEPTS.forEach(function(d){var open=GV.openDep===d.id;
+  h+='<div class="raildept'+(open?' open':'')+'" onclick="toggleDep(\''+d.id+'\')"><span>'+d.n+'</span><span class="rc">'+DEPTCOUNT[d.id]+'</span></div>';
+  if(open){GROUPSBYDEP[d.id].forEach(function(g){h+='<a class="railgrp'+(GV.code===g?' on':'')+'" onclick="showGroup(\''+g+'\')"><span>'+GROUPS[g].n+'</span><span class="rc">'+GROUPS[g].c+'</span></a>';});}
+ });
+ document.getElementById('catnav').innerHTML=h;
+}
+function toggleDep(d){if(GV.openDep===d&&!GV.code){GV.openDep=null;buildRail();}else{GV.openDep=d;showDept(d);}}
+
+/* all-categories browse (home) */
+const INIT=24;
+function sectionHtml(c){var it=GRP[c.id]||[];var shown=it.slice(0,INIT);
+ var more=it.length>INIT?'<div class="showmore"><button onclick="showGroupsOf(\''+c.id+'\')">Filter &amp; compare all '+it.length+' in '+c.name+' →</button></div>':'';
+ return '<section class="csec" id="sec-'+c.id+'"><div class="csechd"><h2 style="cursor:pointer" onclick="showDept(\''+c.id+'\')">'+c.name+'</h2><span class="cct">'+it.length+' products</span></div>'+
   '<div style="color:#777;font-size:13.5px;margin:-6px 0 14px;max-width:70ch">'+c.blurb+'</div>'+
-  '<div class="tiles" id="tiles-'+c.id+'">'+shown.map(tile).join('')+'</div>'+more+'</section>';}
-function renderHome(){document.getElementById('cats').innerHTML=CATS.map(sectionHtml).join('');}
-function expandSec(id){const it=GRP[id]||[];document.getElementById('tiles-'+id).innerHTML=it.map(tile).join('');const b=document.querySelector('#sec-'+id+' .showmore');if(b)b.remove();}
-renderHome();
+  '<div class="tiles">'+shown.map(tile).join('')+'</div>'+more+'</section>';}
+function renderAllCats(){document.getElementById('cats').innerHTML=CATS.map(sectionHtml).join('');}
+function showGroupsOf(dep){showDept(dep);}
 
-/* ---- search ---- */
-function doSearch(q){q=q.toLowerCase().trim();showHome();
- if(q.length<2){renderHome();return;}
- const m=PRODUCTS.filter(p=>(p.n+' '+p.d+' '+p.id+' '+CN[p.c]+' '+(GROUPS[p.g]?GROUPS[p.g].n:'')).toLowerCase().indexOf(q)>-1);
- const cap=m.slice(0,300);
- document.getElementById('cats').innerHTML='<section class="csec"><div class="csechd"><h2>Results for “'+q+'”</h2><span class="cct">'+m.length+' product'+(m.length===1?'':'s')+(m.length>300?' · showing first 300':'')+'</span></div><div class="tiles">'+(cap.length?cap.map(tile).join(''):'<div style="color:#888;padding:30px">No products match. Try a SKU, a material like “gloves”, or a category.</div>')+'</div></section>';}
+/* department -> group list */
+function showDept(dep){GV.code=null;GV.deptView=dep;GV.openDep=dep;showLayout();
+ var h='<div class="gcrumb"><a onclick="showHome()">All products</a> › <span>'+DEPT[dep].n+'</span></div>';
+ h+='<div class="ghd">'+DEPT[dep].n+'</div><div style="color:#777;font-size:13.5px;max-width:70ch">'+(BLURB[dep]||'')+'</div>';
+ h+='<div class="grouplist">';
+ GROUPSBYDEP[dep].forEach(function(g){var s=GRP_BYGROUP[g][0];
+  h+='<a class="groupcard" onclick="showGroup(\''+g+'\')"><div class="gci">'+artSvg(s)+'</div><div><div class="gn">'+GROUPS[g].n+'</div><div class="gm">'+GROUPS[g].c+' products</div></div><span class="garrow">›</span></a>';});
+ h+='</div>';
+ document.getElementById('cats').innerHTML=h;buildRail();window.scrollTo(0,0);
+}
+
+/* group -> parametric view */
+var FACETS=[['type','Type'],['size','Size'],['apparel','Garment size'],['material','Material'],['joint','Joint'],['angle','Angle'],['color','Colour'],['volume','Volume'],['length','Length']];
+function pval(p,k){var v=ATTR[p.id][k];return (v===undefined||v===null||v==='')?null:v;}
+function activeFacets(pool){var out=[];FACETS.forEach(function(f){var seen={},n=0;pool.forEach(function(p){var v=pval(p,f[0]);if(v!=null&&!seen[v]){seen[v]=1;n++;}});if(n>1)out.push(f);});return out;}
+function matchExcept(p,exc){for(var k in GV.F){if(k===exc)continue;var sel=GV.F[k];if(sel&&sel.length&&sel.indexOf(pval(p,k))<0)return false;}return true;}
+function facetCounts(pool,k){var m={};pool.filter(function(p){return matchExcept(p,k);}).forEach(function(p){var v=pval(p,k);if(v!=null)m[v]=(m[v]||0)+1;});return m;}
+function sortVals(k,vals){var ord=['XS','S','SMALL','S/M','M','MEDIUM','L','LARGE','L/XL','XL','XXL','2XL','XXXL','3XL'];
+ if(k==='apparel')return vals.sort(function(a,b){return ord.indexOf((a||'').toUpperCase())-ord.indexOf((b||'').toUpperCase());});
+ if(k==='size'||k==='angle'||k==='volume'||k==='length')return vals.sort(function(a,b){return (parseFloat(a)||0)-(parseFloat(b)||0);});
+ return vals.sort();}
+function toggleFacet(k,v){if(!GV.F[k])GV.F[k]=[];var i=GV.F[k].indexOf(v);if(i<0)GV.F[k].push(v);else GV.F[k].splice(i,1);if(!GV.F[k].length)delete GV.F[k];renderGroup();}
+function clearFacets(){GV.F={};renderGroup();}
+function setUnits(u){GV.units=u;renderGroup();}
+function setView(v){GV.view=v;renderGroup();}
+function setSort(k){if(GV.sort&&GV.sort.key===k)GV.sort.dir*=-1;else GV.sort={key:k,dir:1};renderGroup();}
+function valDisp(p,k){if(k==='size')return convSize(pval(p,k),GV.units)||'—';if(k==='color'){var hx=ATTR[p.id].colorhex;return (hx?'<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:'+hx+';border:1px solid #ccc;vertical-align:middle;margin-right:5px"></span>':'')+(pval(p,k)||'—');}return pval(p,k)||'—';}
+function showGroup(code){GV.code=code;GV.deptView=null;GV.F={};GV.sort=null;GV.openDep=GROUPS[code].d;showLayout();renderGroup();window.scrollTo(0,0);}
+function addRow(id){ORDER++;document.getElementById('ordc').textContent=ORDER;toast('Added · '+BYID[id].n);}
+function renderGroup(){
+ var code=GV.code,pool0=GRP_BYGROUP[code]||[];
+ var facets=activeFacets(pool0);
+ var filtered=pool0.filter(function(p){return matchExcept(p,'__x__');});
+ var cols=facets.filter(function(f){return f[0]!=='type';}).slice(0,4);
+ if(!GV.sort){var sk=cols.length?cols[0][0]:'name';GV.sort={key:sk,dir:1};}
+ var s=GV.sort;
+ filtered.sort(function(a,b){var r;
+  if(s.key==='price'){r=(a.p==null?1e15:a.p)-(b.p==null?1e15:b.p);}
+  else if(s.key==='name'){r=(a.n||'').localeCompare(b.n||'');}
+  else{var an=parseFloat(((pval(a,s.key)||'').match(/[\d.]+/)||[0])[0])||0,bn=parseFloat(((pval(b,s.key)||'').match(/[\d.]+/)||[0])[0])||0;r=an-bn;if(r===0)r=(pval(a,s.key)||'').localeCompare(pval(b,s.key)||'');}
+  return r*s.dir;});
+ var hasSize=facets.some(function(f){return f[0]==='size';});
+ var h='<div class="gcrumb"><a onclick="showHome()">All products</a> › <a onclick="showDept(\''+GROUPS[code].d+'\')">'+DEPT[GROUPS[code].d].n+'</a> › <span>'+GROUPS[code].n+'</span></div>';
+ h+='<div class="ghd">'+GROUPS[code].n+'</div>';
+ h+='<div class="gtop"><div class="gcount"><b>'+filtered.length+'</b> of '+pool0.length+' products</div><div class="seg-wrap" style="display:flex;gap:8px">';
+ if(hasSize)h+='<span class="seg"><button class="'+(GV.units==='mm'?'on':'')+'" onclick="setUnits(\'mm\')">mm</button><button class="'+(GV.units==='inch'?'on':'')+'" onclick="setUnits(\'inch\')">inch</button></span>';
+ h+='<span class="seg"><button class="'+(GV.view==='table'?'on':'')+'" onclick="setView(\'table\')">Table</button><button class="'+(GV.view==='grid'?'on':'')+'" onclick="setView(\'grid\')">Grid</button></span></div></div>';
+ // facet band
+ if(facets.length){h+='<div class="facets">';
+  facets.forEach(function(f){var k=f[0];var counts=facetCounts(pool0,k);var vals=sortVals(k,Object.keys(counts));
+   h+='<div class="frow"><span class="flabel">'+f[1]+'</span>';
+   vals.forEach(function(v){var on=GV.F[k]&&GV.F[k].indexOf(v)>-1;var disp=(k==='size')?convSize(v,GV.units):v;
+    h+='<span class="fval'+(on?' on':'')+'" onclick="toggleFacet(\''+k+'\',\''+(''+v).replace(/'/g,"\\'")+'\')">'+disp+'<span class="fc">'+counts[v]+'</span></span>';});
+   h+='</div>';});
+  h+='</div>';}
+ // active chips
+ var act=[];for(var k in GV.F){GV.F[k].forEach(function(v){act.push(k+': '+((k==='size')?convSize(v,GV.units):v));});}
+ if(act.length)h+='<div class="factive">'+act.join(' · ')+'<span class="clr" onclick="clearFacets()">clear all</span></div>';
+ // results
+ if(!filtered.length){h+='<div style="color:#888;padding:30px 4px">No products match these choices. <span style="color:#d81f2c;cursor:pointer" onclick="clearFacets()">Clear</span></div>';}
+ else if(GV.view==='grid'){h+='<div class="tiles">'+filtered.map(tile).join('')+'</div>';}
+ else{
+  function th(label,key){var ar=GV.sort.key===key?'<span class="ar"> '+(GV.sort.dir>0?'↑':'↓')+'</span>':'';return '<th onclick="setSort(\''+key+'\')">'+label+ar+'</th>';}
+  h+='<table class="ptab"><thead><tr><th></th>'+th('Product','name');
+  cols.forEach(function(c){h+=th(c[1],c[0]);});
+  h+='<th class="pz" onclick="setSort(\'price\')">Price'+(GV.sort.key==='price'?'<span class="ar"> '+(GV.sort.dir>0?'↑':'↓')+'</span>':'')+'</th><th></th></tr></thead><tbody>';
+  filtered.forEach(function(p){
+   h+='<tr><td><div class="ti2">'+artSvg(p)+'</div></td>'+
+      '<td><span class="nmc" onclick="openProduct('+p.id+')">'+p.n+'</span></td>';
+   cols.forEach(function(c){h+='<td>'+valDisp(p,c[0])+'</td>';});
+   h+='<td class="pz">'+(p.p!=null?money(p.p):'<span style="color:#999">request</span>')+'</td>'+
+      '<td><button class="addb" onclick="addRow('+p.id+')" aria-label="add to order">+</button></td></tr>';});
+  h+='</tbody></table>';
+ }
+ document.getElementById('cats').innerHTML=h;buildRail();
+}
+
+/* search */
+function doSearch(q){q=q.toLowerCase().trim();GV.code=null;GV.deptView=null;showLayout();
+ if(q.length<2){showHome();return;}
+ var m=PRODUCTS.filter(function(p){return (p.n+' '+p.d+' '+p.id+' '+CN[p.c]+' '+(GROUPS[p.g]?GROUPS[p.g].n:'')).toLowerCase().indexOf(q)>-1;});
+ var cap=m.slice(0,300);buildRail();
+ document.getElementById('cats').innerHTML='<div class="gcrumb"><a onclick="showHome()">All products</a> › <span>Search</span></div><div class="ghd">“'+q+'”</div><div class="gcount" style="margin:6px 0 14px"><b>'+m.length+'</b> product'+(m.length===1?'':'s')+(m.length>300?' · showing first 300':'')+'</div><div class="tiles">'+(cap.length?cap.map(tile).join(''):'<div style="color:#888;padding:30px">No products match. Try a SKU, a material like “gloves”, or a category.</div>')+'</div>';}
 document.getElementById('q').addEventListener('input',function(){doSearch(this.value);});
 
-/* ---- nav helpers ---- */
-function jump(id){menu(false);showHome();var q=document.getElementById('q');if(q.value){q.value='';renderHome();}setTimeout(function(){var e=document.getElementById(id);if(e)e.scrollIntoView({behavior:'smooth',block:'start'});},60);}
+/* nav helpers */
+function jump(id){menu(false);showDept((''+id).replace('sec-',''));}
 function menu(o){document.body.classList.toggle('menu-open',o);}
 function browseClick(){if(window.innerWidth<=900)menu(true);else{showHome();window.scrollTo({top:0,behavior:'smooth'});}}
 function toast(t){const el=document.getElementById('tt');el.textContent=t;el.classList.add('on');clearTimeout(window._tt);window._tt=setTimeout(()=>el.classList.remove('on'),1800);}
-function showHome(){document.getElementById('pdp').style.display='none';document.querySelector('.layout').style.display='flex';}
+function showHome(){GV.code=null;GV.deptView=null;GV.openDep=null;showLayout();renderAllCats();buildRail();}
+showHome();
 
 /* ---- order ---- */
 let ORDER=0;
