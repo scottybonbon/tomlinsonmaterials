@@ -218,7 +218,7 @@ function parseSpec(p){
  const dep=depOf(p);const u=(p.d||'').toUpperCase();const a={};
  for(const[rx,ty,gl] of TYPE_RULES){if(rx.test(u)){a.type=ty;a.glyph=gl;break;}}
  const uc=u.replace(/(\d{1,3})(?:[ -]\d\/\d)?\s*DEG/g,' ');
- const dim=uc.match(/(\d+)\s*(?:MM)?\s*[Xx]\s*(\d+)(?![\d.])/);
+ const dim=uc.match(/(?<![\d.])(\d+)\s*(?:MM)?\s*[Xx]\s*(\d+)(?!\s*M(?!M))(?![\d.])/);
  const mm=uc.match(/(\d+(?:\.\d+)?)\s*MM\b/);
  const inch=uc.match(/(\d+(?:[ ]\d+)?(?:[./]\d+)?)\s*(?:IN\b|")/);
  const ft=uc.match(/(\d+(?:\.\d+)?)\s*(?:FT\b|')/);
@@ -226,7 +226,7 @@ function parseSpec(p){
  const deg=u.match(/(\d{1,3})(?:[ -](\d)\/(\d))?\s*DEG/);
  if(dim)a.size=dim[1]+' × '+dim[2]+' mm';else if(mm)a.size=mm[1]+' mm';else if(inch)a.size=inch[1].trim()+'"';
  if(ft)a.length=ft[1]+' ft';
- if(vol)a.volume=vol[1]+' '+vol[2].toLowerCase();
+ if(vol){var vn=parseFloat(vol[1]),vu=vol[2].toUpperCase();var vok=(vu==='L'&&vn<=1500)||(vu==='ML'&&vn<=20000)||(vu==='KG'&&vn<=2000)||(vu==='G'&&vn<=5000)||(vu==='OZ'&&vn<=1000);if(vok)a.volume=vol[1]+' '+vol[2].toLowerCase();}
  if(deg){let v=parseInt(deg[1]);if(deg[2])v+=parseInt(deg[2])/parseInt(deg[3]);a.angle=(Math.round(v*100)/100)+'°';}
  for(const[rx,m] of MAT_RULES){const mt=u.match(rx);if(mt){a.material=m.replace('$1',mt[1]||'');break;}}
  for(const[rx,j] of JOINT_RULES){if(rx.test(u)){a.joint=j;break;}}
@@ -313,6 +313,7 @@ document.head.insertAdjacentHTML('beforeend','<style>'+
 '.gtop{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin:14px 0 12px}'+
 '.gcount{font-size:14px;color:#666}.gcount b{color:#111}'+
 '.seg{display:inline-flex;border:1px solid #ddd;border-radius:8px;overflow:hidden}.seg button{border:0;background:#fff;padding:6px 11px;font-size:12.5px;color:#666;cursor:pointer;font-family:inherit}.seg button.on{background:#111;color:#fff}'+
+'.layout main{min-width:0;max-width:100%}.facets,.gtop,.factive,.grouplist{max-width:100%}'+
 '.facets{border:1px solid #e8e8e4;border-radius:10px;padding:6px 14px;margin-bottom:14px}'+
 '.frow{display:flex;gap:6px;align-items:baseline;padding:7px 0;flex-wrap:wrap}.frow+.frow{border-top:1px solid #f1f1ed}'+
 '.flabel{width:84px;flex:none;font-size:11px;color:#999;text-transform:uppercase;letter-spacing:.05em;padding-top:4px}'+
@@ -413,6 +414,7 @@ function renderGroup(){
  // facet band
  if(facets.length){h+='<div class="facets">';
   facets.forEach(function(f){var k=f[0];var counts=facetCounts(pool0,k);var vals=sortVals(k,Object.keys(counts));
+   if(!vals.length)return;
    h+='<div class="frow"><span class="flabel">'+f[1]+'</span>';
    vals.forEach(function(v){var on=GV.F[k]&&GV.F[k].indexOf(v)>-1;var disp=(k==='size')?convSize(v,GV.units):v;
     h+='<span class="fval'+(on?' on':'')+'" onclick="toggleFacet(\''+k+'\',\''+(''+v).replace(/'/g,"\\'")+'\')">'+disp+'<span class="fc">'+counts[v]+'</span></span>';});
@@ -426,7 +428,7 @@ function renderGroup(){
  else if(GV.view==='grid'){h+='<div class="tiles">'+filtered.map(tile).join('')+'</div>';}
  else{
   function th(label,key){var ar=GV.sort.key===key?'<span class="ar"> '+(GV.sort.dir>0?'↑':'↓')+'</span>':'';return '<th onclick="setSort(\''+key+'\')">'+label+ar+'</th>';}
-  h+='<table class="ptab"><thead><tr><th></th>'+th('Product','name');
+  h+='<div style="overflow-x:auto;-webkit-overflow-scrolling:touch"><table class="ptab"><thead><tr><th></th>'+th('Product','name');
   cols.forEach(function(c){h+=th(c[1],c[0]);});
   h+='<th class="pz" onclick="setSort(\'price\')">Price'+(GV.sort.key==='price'?'<span class="ar"> '+(GV.sort.dir>0?'↑':'↓')+'</span>':'')+'</th><th></th></tr></thead><tbody>';
   filtered.forEach(function(p){
@@ -435,7 +437,7 @@ function renderGroup(){
    cols.forEach(function(c){h+='<td>'+valDisp(p,c[0])+'</td>';});
    h+='<td class="pz">'+(p.p!=null?money(p.p):'<span style="color:#999">request</span>')+'</td>'+
       '<td><button class="addb" onclick="addRow('+p.id+')" aria-label="add to order">+</button></td></tr>';});
-  h+='</tbody></table>';
+  h+='</tbody></table></div>';
  }
  document.getElementById('cats').innerHTML=h;buildRail();
 }
